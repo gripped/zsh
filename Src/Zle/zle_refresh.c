@@ -187,6 +187,11 @@ mod_export int clearflag;
 /**/
 mod_export int clearlist;
 
+/* Maximum value of lprompth + nlnct for the current command */
+
+/**/
+int maxheight;
+
 /* Zle in trashed state - updates may be subtly altered */
 
 /**/
@@ -1182,10 +1187,15 @@ zrefresh(void)
 	zsetterm();
 #ifdef TIOCGWINSZ
 	if (winchanged) {
-	    moveto(0, 0);
+	    if (cursorsaved) {
+		tcout(TCRESTRCURSOR);
+		zputc(&zr_cr);
+		vln = vcs = 0;
+	    } else {
+		moveto(0, 0);
+	    }
 	    t0 = olnct;		/* this is to clear extra lines even when */
-	    winchanged = 0;	/* the terminal cannot TCCLEAREOD	  */
-	    listshown = 0;
+	    listshown = 0;	/* the terminal cannot TCCLEAREOD	  */
 	}
 #endif
 	/* we probably should only have explicitly set attributes */
@@ -1213,6 +1223,8 @@ zrefresh(void)
 	if (termflags & TERM_SHORT)
 	    vcs = 0;
 	else if (!clearflag && lpromptbuf[0]) {
+	    if ((cursorsaved = tccan(TCSAVECURSOR) && tccan(TCRESTRCURSOR)))
+		tcout(TCSAVECURSOR);
 	    zputs(lpromptbuf, shout);
 	    if (lpromptwof == winw)
 		zputs("\n", shout);	/* works with both hasam and !hasam */
@@ -1234,6 +1246,7 @@ zrefresh(void)
    width comparisons can be made with winw, height comparisons with winh */
 
     if (termflags & TERM_SHORT) {
+	cursorsaved = 0;
 	singlerefresh(tmpline, tmpll, tmpcs);
 	goto singlelineout;
     }
@@ -1785,6 +1798,16 @@ individually */
     }
     clearf = 0;
     oput_rpmpt = put_rpmpt;
+
+    if (lprompth + nlnct > maxheight) {
+	maxheight = lprompth + nlnct;
+	if (lprompth + nlnct > rwinh) {
+	    cursorsaved = 0;
+	} else if (cursorsaved) {
+	    moveto(1 - lprompth, 0);
+	    tcout(TCSAVECURSOR);
+	}
+    }
 
 /* move to the new cursor position */
     moveto(rpms.nvln, rpms.nvcs);
